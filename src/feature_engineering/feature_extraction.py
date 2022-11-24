@@ -186,7 +186,7 @@ def create_collection(milvus_cnf: Milvus, embedding_size: int, drop_exist: bool 
     return milvus_collection
 
 
-def vector_search(data, top_k: int, collection, metric_type="L2", output="results"):
+def vector_search(data, top_k: int, collection, metric_type, output="results"):
     # calling the collection refresh function
     # collection = CollectionRefresh(drop=True, collection_name="transactions", sn=sn, cl="Strong")
 
