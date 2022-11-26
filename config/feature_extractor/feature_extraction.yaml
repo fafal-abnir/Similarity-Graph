@@ -4,13 +4,14 @@ milvus:
   url: "localhost"
   port: "19530"
   collection_name: "credit_card_graph_feature"
-  top_k: 128
+  top_k: 100
   index_type: "HNSW"
-  metric_type: "IP"
+  metric_type: "L2"
   index_params: {"M": 16, "efConstruction": 32}
 paths:
   data : data/raw/creditcard.csv
-  output_dir : data/processed
+  output_dir : data/final
+  save_graphs : true
 
 
 

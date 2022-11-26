@@ -1,0 +1,6 @@
+defaults:
+  - model: rfc
+  - data: sample
+over_sampling:
+result_dir: data/results
+group_time: 7200

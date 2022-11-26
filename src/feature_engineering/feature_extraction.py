@@ -1,4 +1,6 @@
 import logging
+import os
+
 import hydra
 from hydra.core.config_store import ConfigStore
 import pandas as pd
@@ -12,7 +14,7 @@ from pymilvus import (
 import datetime
 import numpy as np
 import time
-from src.config.feature_extractor.config import FeatureExtractionConfig, Milvus
+from config.feature_extractor.config import FeatureExtractionConfig, Milvus
 
 log = logging.getLogger(__name__)
 
@@ -20,8 +22,12 @@ cs = ConfigStore.instance()
 cs.store(name="feature_extraction", node=FeatureExtractionConfig)
 
 
-@hydra.main(version_base=None, config_path="../config/feature_extractor", config_name="feature_extraction")
+@hydra.main(version_base=None, config_path="../../config/feature_extractor", config_name="feature_extraction")
 def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
+    if not os.path.exists(cfg.paths.output_dir):
+        os.makedirs(cfg.paths.output_dir)
+    if not os.path.exists(f"{cfg.paths.output_dir}/graphs/{cfg.milvus.top_k}_{cfg.milvus.metric_type}"):
+        os.makedirs(f"{cfg.paths.output_dir}/graphs/{cfg.milvus.top_k}_{cfg.milvus.metric_type}")
     log.info(cfg)
     start_time = time.time()
     credit_card_collection = create_collection(cfg.milvus, embedding_size=28)
@@ -142,6 +148,10 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
         current_window_fraud_trans = list(group[group["Class"] == 1].index)
         fraud_trans = fraud_trans + current_window_fraud_trans
 
+
+        # Saving graphs
+        nx.write_gpickle(G,f"{cfg.paths.output_dir}/graphs/{cfg.milvus.top_k}_{cfg.milvus.metric_type}/{group_time}")
+
     dt = datetime.datetime.now()
 
     # Format datetime string
@@ -152,7 +162,7 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
     trans_df["community_risk"] = community_risk
     trans_df["personalized_page_rank"] = personalized_page_rank
 
-    trans_df.to_csv(f"{cfg.paths.output_dir}/creditcard_extra_graph_{cfg.milvus.top_k}_{cfg.milvus.metric_type}_{x}.csv")
+    trans_df.to_csv(f"{cfg.paths.output_dir}/creditcard_extra_graph_{cfg.milvus.top_k}_{cfg.milvus.metric_type}.csv")
 
     print(f"total time:{(time.time() - start_time):.3f} s")
 
