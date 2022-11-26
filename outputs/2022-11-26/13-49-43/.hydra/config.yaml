@@ -1,0 +1,15 @@
+paths:
+  data: data/raw/creditcard-10000.csv
+  output_dir: data/processed
+milvus:
+  index_params:
+    M: 16
+    efConstruction: 32
+  user: default
+  password: ''
+  url: localhost
+  port: '19530'
+  collection_name: credit_card_graph_feature
+  top_k: 128
+  index_type: HNSW
+  metric_type: IP
