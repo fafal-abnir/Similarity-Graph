@@ -26,7 +26,7 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
     start_time = time.time()
     credit_card_collection = create_collection(cfg.milvus, embedding_size=28)
     top_k = cfg.milvus.top_k
-    trans_df = pd.read_csv(f"../{cfg.paths.data}")
+    trans_df = pd.read_csv(f"{cfg.paths.data}")
     max_time = trans_df["Time"].max()
     group_df = trans_df.groupby(pd.cut(trans_df["Time"], np.arange(-1, max_time + 3600, 3600)))
     fraud_trans = []
@@ -152,7 +152,7 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
     trans_df["community_risk"] = community_risk
     trans_df["personalized_page_rank"] = personalized_page_rank
 
-    trans_df.to_csv(f"../{cfg.paths.output_dir}/creditcard_extra_graph_{cfg.milvus.top_k}_{cfg.milvus.metric_type}_{x}.csv")
+    trans_df.to_csv(f"{cfg.paths.output_dir}/creditcard_extra_graph_{cfg.milvus.top_k}_{cfg.milvus.metric_type}_{x}.csv")
 
     print(f"total time:{(time.time() - start_time):.3f} s")
 

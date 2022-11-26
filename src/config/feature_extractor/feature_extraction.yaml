@@ -9,7 +9,7 @@ milvus:
   metric_type: "IP"
   index_params: {"M": 16, "efConstruction": 32}
 paths:
-  data : data/raw/creditcard-10000.csv
+  data : data/raw/creditcard.csv
   output_dir : data/processed
 
 
