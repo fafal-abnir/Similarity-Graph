@@ -18,6 +18,7 @@ class Milvus:
 class Paths:
     data: str
     output_dir: str
+    save_graphs: bool
 
 
 @dataclass
