@@ -1,8 +1,8 @@
 import logging
 import os
-
+import math
 import hydra
-from hydra.core.config_store import ConfigStore
+from omegaconf import DictConfig
 import pandas as pd
 import networkx as nx
 from pymilvus import (
@@ -14,25 +14,37 @@ from pymilvus import (
 import datetime
 import numpy as np
 import time
-from config.feature_extractor.config import FeatureExtractionConfig, Milvus
+
+from config.feature_extractor.config import MilvusConf
 
 log = logging.getLogger(__name__)
 
-cs = ConfigStore.instance()
-cs.store(name="feature_extraction", node=FeatureExtractionConfig)
 
 
-@hydra.main(version_base=None, config_path="../../config/feature_extractor", config_name="feature_extraction")
-def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
-    if not os.path.exists(cfg.paths.output_dir):
-        os.makedirs(cfg.paths.output_dir)
-    if not os.path.exists(f"{cfg.paths.output_dir}/graphs/{cfg.milvus.top_k}_{cfg.milvus.metric_type}"):
-        os.makedirs(f"{cfg.paths.output_dir}/graphs/{cfg.milvus.top_k}_{cfg.milvus.metric_type}")
+@hydra.main(version_base=None, config_path="../../config/feature_extractor", config_name="config")
+def similarity_graph_feature_extraction(cfg: DictConfig):
     log.info(cfg)
     start_time = time.time()
-    credit_card_collection = create_collection(cfg.milvus, embedding_size=28)
-    top_k = cfg.milvus.top_k
-    trans_df = pd.read_csv(f"{cfg.paths.data}")
+    milvus_conf = cfg.feature_extraction.milvus
+    credit_card_collection = create_collection(milvus_conf, embedding_size=28)
+    top_k = cfg.feature_extraction.milvus.top_k
+    output_dir = cfg.feature_extraction.paths.output_dir
+    metric_type = cfg.feature_extraction.milvus.metric_type
+
+    if cfg.feature_extraction.milvus.threshold is None:
+        graph_dir_path = f"{output_dir}/graphs/{top_k}_{metric_type}"
+        csv_path = f"{output_dir}/creditcard_extra_graph_{top_k}_{metric_type}.csv"
+        threshold_dist = 99999
+    else:
+        threshold_dist = cfg.feature_extraction.milvus.threshold
+        csv_path = f"{output_dir}/creditcard_extra_graph_{top_k}_{metric_type}_{threshold_dist}.csv"
+        graph_dir_path = f"{output_dir}/graphs/{top_k}_{metric_type}_{threshold_dist}"
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    if not os.path.exists(graph_dir_path):
+        os.makedirs(graph_dir_path)
+    trans_df = pd.read_csv(f"{cfg.feature_extraction.paths.data}")
     max_time = trans_df["Time"].max()
     group_df = trans_df.groupby(pd.cut(trans_df["Time"], np.arange(-1, max_time + 3600, 3600)))
     fraud_trans = []
@@ -42,7 +54,7 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
     personalized_page_rank = {}
     community_risk = {}
     fraud_neighbor_count = {}
-    G = nx.DiGraph()
+    G = nx.Graph()
     # source_id = 0
     for group_time, group in group_df:
         group_number = int((group_time.left + 1) / 3600 + 1)
@@ -63,7 +75,7 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
                                                                    group.index}
         index_mapping_milvus_to_df = index_mapping_milvus_to_df | {v: k for k, v in index_mapping_df_to_milvus.items()}
         credit_card_collection.load()
-        x = vector_search(list(group_feature), top_k, credit_card_collection, cfg.milvus.metric_type)
+        x = vector_search(list(group_feature), top_k, credit_card_collection, metric_type)
         log.info(f"Searching time: {time.time() - t:.3f} s")
 
         # Similarity to past fraud transaction
@@ -73,7 +85,7 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
         for transaction in x:
             distances_fraud = []
             for result in transaction:
-                if index_mapping_milvus_to_df[result.id] in fraud_trans:
+                if (index_mapping_milvus_to_df[result.id] in fraud_trans) and result.distance <= threshold_dist:
                     distances_fraud.append(result.distance)
             if len(distances_fraud) > 0:
                 avg_distance_from_frauds[source_id] = sum(distances_fraud) / top_k
@@ -82,29 +94,31 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
             source_id += 1
         log.info(f"Similarity to past fraud time: {time.time() - t:.3f} s")
         # Counting number fraud neighbor
-        log.info(f"Counting number of fraud neighbor at Top_K={cfg.milvus.top_k}")
+        log.info(f"Counting number of fraud neighbor at Top_K={top_k}")
         t = time.time()
         source_id = first_group_index
         for transaction in x:
             distances_fraud = []
             fraud_count = 0
             for result in transaction:
-                if index_mapping_milvus_to_df[result.id] in fraud_trans:
+                if (index_mapping_milvus_to_df[result.id] in fraud_trans) and result.distance <= threshold_dist:
                     fraud_count += 1
             fraud_neighbor_count[source_id] = fraud_count
             source_id += 1
 
         # Generating graph
+        # edge represents  distance
         log.info("Generating dynamic graph")
         t = time.time()
         l = []
         source_id = first_group_index
         for transaction in x:
             for result in transaction:
-                if result.distance != 0:
-                    l.append((source_id, index_mapping_milvus_to_df[result.id], 1 / result.distance))
+                if index_mapping_milvus_to_df[result.id] != source_id and result.distance < threshold_dist:
+                    l.append((source_id, index_mapping_milvus_to_df[result.id], (1/math.log(result.distance+math.e))))
             source_id += 1
         # Drop self loop
+        G.add_nodes_from(list(group.index))
         G.add_weighted_edges_from(l)
         del l
         log.info(f"Add edge to the graph time: {time.time() - t:.3f} s")
@@ -117,7 +131,10 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
             personalization = None
         page_ranks = nx.pagerank(G, personalization=personalization)
         for current_index in group.index:
-            personalized_page_rank[current_index] = page_ranks[current_index]
+            try:
+                personalized_page_rank[current_index] = page_ranks[current_index]
+            except:
+                log.error(current_index)
         del personalization
         log.info(f"Personalized page rank with respect to known fraud: {time.time() - t:.3f} s")
 
@@ -150,7 +167,7 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
 
 
         # Saving graphs
-        nx.write_gpickle(G,f"{cfg.paths.output_dir}/graphs/{cfg.milvus.top_k}_{cfg.milvus.metric_type}/{group_time}")
+        nx.write_gpickle(G,f"{graph_dir_path}/{group_time}")
 
     dt = datetime.datetime.now()
 
@@ -162,12 +179,12 @@ def similarity_graph_feature_extraction(cfg: FeatureExtractionConfig):
     trans_df["community_risk"] = community_risk
     trans_df["personalized_page_rank"] = personalized_page_rank
 
-    trans_df.to_csv(f"{cfg.paths.output_dir}/creditcard_extra_graph_{cfg.milvus.top_k}_{cfg.milvus.metric_type}.csv")
+    trans_df.to_csv(csv_path)
 
     print(f"total time:{(time.time() - start_time):.3f} s")
 
 
-def create_collection(milvus_cnf: Milvus, embedding_size: int, drop_exist: bool = True,
+def create_collection(milvus_cnf: MilvusConf, embedding_size: int, drop_exist: bool = True,
                       description: str = "No description"):
     collection_name = milvus_cnf.collection_name
     connections.connect(milvus_cnf.user, host=milvus_cnf.url, port=milvus_cnf.port)

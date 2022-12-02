@@ -3,7 +3,7 @@ import os
 from collections import Counter
 import pandas as pd
 from imblearn.over_sampling import RandomOverSampler
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, f1_score, precision_score
 from sklearn.preprocessing import StandardScaler
@@ -11,6 +11,8 @@ import numpy as np
 import hydra
 from omegaconf import DictConfig
 import dataframe_image as dfi
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +36,12 @@ def get_model(cfg: DictConfig):
             return RandomForestClassifier(n_estimators=cfg.num_estimator)
         case 'KNN':
             return KNeighborsClassifier(n_neighbors=cfg.num_neighbors)
+        case 'DecisionTree':
+            return DecisionTreeClassifier(max_depth=cfg.max_depth)
+        case 'SCV':
+            return SVC(gamma=cfg.gamma, C=cfg.c)
+        case "Ada":
+            return AdaBoostClassifier(n_estimators=cfg.num_estimator)
 
 
 def dynamic_clf(model, data_path, data_name, over_sampling=None, result_dir="../../data/results",

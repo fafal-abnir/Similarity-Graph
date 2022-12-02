@@ -1,11 +1,11 @@
 # log
-outputs
-multirun
+outputs/
+multirun/
 # Created by https://www.toptal.com/developers/gitignore/api/python,data,pycharm+all
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,data,pycharm+all
 
 ### Data ###
-data
+data/
 *.csv
 *.dat
 *.efx
