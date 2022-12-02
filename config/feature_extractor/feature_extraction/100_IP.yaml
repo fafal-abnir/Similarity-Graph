@@ -3,15 +3,13 @@ milvus:
   password: ""
   url: "localhost"
   port: "19530"
-  collection_name: "credit_card_graph_feature"
+  collection_name: "credit_card_graph_feature2"
   top_k: 100
+  threshold:
   index_type: "HNSW"
-  metric_type: "L2"
+  metric_type: "IP"
   index_params: {"M": 16, "efConstruction": 32}
 paths:
   data : data/raw/creditcard.csv
   output_dir : data/final
   save_graphs : true
-
-
-

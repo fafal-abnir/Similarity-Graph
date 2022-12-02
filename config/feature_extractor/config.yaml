@@ -1,0 +1,2 @@
+defaults:
+  - feature_extraction: 50_L2
